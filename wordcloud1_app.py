@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import json  # Pour sauvegarder et charger les mots
 import os  # Pour vérifier l'existence du fichier
 import time  # Pour le rafraîchissement automatique
+from collections import Counter  # Pour compter les occurrences des mots
 
 # Configuration de la page
 st.set_page_config(page_title="Nuage de mots en direct", layout="wide")
@@ -108,7 +109,7 @@ if st.button("Soumettre"):
             else:
                 st.warning("Veuillez sélectionner un mot avant de soumettre.")
 
-# Affichage dynamique du nuage de mots uniquement pour l'administrateur
+# Affichage dynamique du nuage de mots et de l'histogramme uniquement pour l'administrateur
 if admin_code == ADMIN_CODE:  # ADMIN_CODE défini comme 2018
     st.subheader("Nuage de mots en direct")
     word_list = load_words()  # Recharger les mots à chaque rafraîchissement
@@ -118,13 +119,33 @@ if admin_code == ADMIN_CODE:  # ADMIN_CODE défini comme 2018
         wordcloud_text = " ".join(word_list)
         wordcloud = WordCloud(width=800, height=400, background_color="white").generate(wordcloud_text)
 
-        # Afficher le nuage de mots
-        fig, ax = plt.subplots()
-        ax.imshow(wordcloud, interpolation="bilinear")
-        ax.axis("off")
-        st.pyplot(fig)
+        # Compter les occurrences des mots pour l'histogramme
+        word_counts = Counter(word_list)
+        words, counts = zip(*word_counts.items())
+
+        # Organisation en deux colonnes avec plus d'espace pour le nuage de mots
+        col1, col2 = st.columns([2, 1])  # Colonne 1 (nuage de mots) plus large que la colonne 2 (histogramme)
+
+        # Afficher le nuage de mots dans la première colonne
+        with col1:
+            st.write("### Nuage de mots")
+            fig, ax = plt.subplots()
+            ax.imshow(wordcloud, interpolation="bilinear")
+            ax.axis("off")
+            st.pyplot(fig)
+
+        # Afficher l'histogramme dans la deuxième colonne avec annotations d'entiers
+        with col2:
+            st.write("### Histogramme des mots")
+            fig, ax = plt.subplots(figsize=(5, 3))  # Taille réduite
+            ax.barh(words, counts)
+            ax.set_xlabel("Nombre de votes")
+            ax.set_ylabel("Mots")
+            ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))  # Annoter uniquement avec des entiers
+            st.pyplot(fig)
+
     else:
-        st.write("Le nuage de mots apparaîtra ici lorsque les participants auront soumis leurs mots.")
+        st.write("Le nuage de mots et l'histogramme apparaîtront ici lorsque les participants auront soumis leurs mots.")
 else:
     if admin_code:  # Vérifie si un code a été saisi
         st.subheader("Nuage de mots")
