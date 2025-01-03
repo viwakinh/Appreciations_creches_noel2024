@@ -45,7 +45,7 @@ if 'has_participated' not in st.session_state:
     st.session_state.has_participated = False
 
 # URL de l'application pour les participants
-url_wordcloud = "https://vote-reunion.streamlit.app"
+url_wordcloud = "https://appreciationscrechesnoel2024-9cdywr4k2o4kx58pc3cgjv.streamlit.app/"
 
 # Génération du QR Code pour les participants
 qr = qrcode.QRCode(
