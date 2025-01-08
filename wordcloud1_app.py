@@ -6,8 +6,8 @@ from wordcloud import WordCloud
 import matplotlib.pyplot as plt
 import json  # Pour sauvegarder et charger les mots
 import os  # Pour vérifier l'existence du fichier
-import time  # Pour le rafraîchissement automatique
 from collections import Counter  # Pour compter les occurrences des mots
+import datetime  # Pour inclure la date et l'heure dans les fichiers
 
 # Configuration de la page
 st.set_page_config(page_title="Nuage de mots en direct", layout="wide")
@@ -20,6 +20,10 @@ PRESELECTED_WORDS = [
     " ", "Ingénieuse", "Innovante", "Imaginative", 
     "Originale", "Éblouissante", "Impressionnante", "Inspirée"
 ]
+
+# Initialiser le numéro d’appréciation si nécessaire
+if 'appreciation_number' not in st.session_state:
+    st.session_state.appreciation_number = 1
 
 # Fonction pour charger les mots depuis un fichier JSON
 def load_words():
@@ -36,6 +40,46 @@ def load_words():
 def save_words(words):
     with open(WORDS_FILE, "w") as file:
         json.dump(words, file)
+
+# Fonction pour enregistrer une image combinée du nuage de mots et de l'histogramme
+def save_charts_combined(wordcloud, word_counts):
+    # Obtenir le numéro d’appréciation actuel
+    appreciation_number = st.session_state.appreciation_number
+
+    # Générer l'horodatage
+    timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    # Créer une figure combinée pour le nuage de mots et l'histogramme
+    fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+    
+    # Nuage de mots
+    axes[0].imshow(wordcloud, interpolation="bilinear")
+    axes[0].axis("off")
+    axes[0].set_title("Nuage de mots")
+
+    # Histogramme
+    words, counts = zip(*word_counts.items())
+    bars = axes[1].barh(words, counts)
+    axes[1].set_xlabel("Nombre de votes")
+    axes[1].set_ylabel("Mots")
+    axes[1].xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+    axes[1].set_title("Histogramme des mots")
+
+    # Ajouter le nombre de votes au sommet de chaque barre
+    for bar, count in zip(bars, counts):
+        axes[1].text(count, bar.get_y() + bar.get_height() / 2, str(count),
+                     va='center', ha='left', fontsize=10)
+
+    # Sauvegarder l'image combinée
+    combined_filename = f"Appreciations_creches_{appreciation_number}_{timestamp}_combined.png"
+    plt.tight_layout()
+    plt.savefig(combined_filename)
+    plt.close(fig)
+
+    # Incrémenter le numéro d’appréciation pour la prochaine sauvegarde
+    st.session_state.appreciation_number += 1
+
+    return combined_filename  # Retourne le nom du fichier pour l'affichage
 
 # Charger les mots au démarrage
 if 'word_list' not in st.session_state:
@@ -109,10 +153,14 @@ if st.button("Soumettre"):
             else:
                 st.warning("Veuillez sélectionner un mot avant de soumettre.")
 
-# Affichage dynamique du nuage de mots et de l'histogramme uniquement pour l'administrateur
+# Bouton Rafraîchir après le bouton Soumettre
+if st.button("Rafraîchir la page"):
+    st.session_state.word_list = load_words()
+
+# Affichage dynamique du nuage de mots et de l'histogramme
 if admin_code == ADMIN_CODE:  # ADMIN_CODE défini comme 2018
     st.subheader("Nuage de mots en direct")
-    word_list = load_words()  # Recharger les mots à chaque rafraîchissement
+    word_list = load_words()  # Recharger les mots
 
     if word_list:
         # Créer le texte pour le nuage de mots à partir des mots soumis
@@ -124,7 +172,7 @@ if admin_code == ADMIN_CODE:  # ADMIN_CODE défini comme 2018
         words, counts = zip(*word_counts.items())
 
         # Organisation en deux colonnes avec plus d'espace pour le nuage de mots
-        col1, col2 = st.columns([2, 1])  # Colonne 1 (nuage de mots) plus large que la colonne 2 (histogramme)
+        col1, col2 = st.columns([2, 1])
 
         # Afficher le nuage de mots dans la première colonne
         with col1:
@@ -134,14 +182,20 @@ if admin_code == ADMIN_CODE:  # ADMIN_CODE défini comme 2018
             ax.axis("off")
             st.pyplot(fig)
 
-        # Afficher l'histogramme dans la deuxième colonne avec annotations d'entiers
+        # Afficher l'histogramme dans la deuxième colonne avec annotations des nombres de votes
         with col2:
             st.write("### Histogramme des mots")
-            fig, ax = plt.subplots(figsize=(5, 3))  # Taille réduite
-            ax.barh(words, counts)
+            fig, ax = plt.subplots(figsize=(5, 3))
+            bars = ax.barh(words, counts)
             ax.set_xlabel("Nombre de votes")
             ax.set_ylabel("Mots")
-            ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))  # Annoter uniquement avec des entiers
+            ax.xaxis.set_major_locator(plt.MaxNLocator(integer=True))
+
+            # Ajouter le nombre de votes au sommet de chaque barre
+            for bar, count in zip(bars, counts):
+                ax.text(count, bar.get_y() + bar.get_height() / 2, str(count),
+                        va='center', ha='left', fontsize=10)
+
             st.pyplot(fig)
 
     else:
@@ -153,25 +207,35 @@ else:
 
 # Fonction pour réinitialiser les mots et l'état des participants
 def reset_words():
-    # Vider la liste des mots et mettre à jour le fichier
+    word_list = load_words()  # Charger les mots actuels
+    if word_list:
+        # Créer et sauvegarder les graphiques combinés
+        wordcloud_text = " ".join(word_list)
+        wordcloud = WordCloud(width=800, height=400, background_color="white").generate(wordcloud_text)
+        word_counts = Counter(word_list)
+        last_saved_file = save_charts_combined(wordcloud, word_counts)
+
+        # Enregistrer le nom du fichier dans la session pour l'historique
+        if "saved_files" not in st.session_state:
+            st.session_state.saved_files = []
+        st.session_state.saved_files.append(last_saved_file)
+
     st.session_state.word_list = []
     save_words([])  # Écrire une liste vide dans le fichier JSON
-    # Réinitialiser l'état de participation pour tous
     if 'has_participated' in st.session_state:
         del st.session_state['has_participated']  # Supprimer l'état de participation
 
-# Vérifiez si l'état de rafraîchissement existe dans la session
-if "refresh" not in st.session_state:
-    st.session_state["refresh"] = False
-
-# Rafraîchissement et réinitialisation manuelle
-if admin_code == ADMIN_CODE:
-    st.sidebar.success("Code correct. Vous pouvez rafraîchir ou réinitialiser.")
-    if st.sidebar.button("Rafraîchir la page"):
-        st.session_state["refresh"] = True
-    if st.sidebar.button("Réinitialiser les votes"):
+# Bouton pour réinitialiser - Affiché uniquement pour l'administrateur
+if admin_code == ADMIN_CODE:  # ADMIN_CODE défini comme 2018
+    if st.sidebar.button("Réinitialiser"):
         reset_words()
-        st.sidebar.success("Tous les mots et états de participation ont été réinitialisés.")
-if st.session_state["refresh"]:
-    st.session_state["refresh"] = False
-    st.query_params = {"refresh": str(time.time())}
+        st.success("Les mots et les graphiques ont été sauvegardés et réinitialisés.")
+
+# Affichage de l'historique des images sauvegardées
+if admin_code == ADMIN_CODE:  # ADMIN_CODE défini comme 2018
+    st.sidebar.subheader("Historique des images sauvegardées")
+    if "saved_files" in st.session_state and st.session_state.saved_files:
+        for saved_file in st.session_state.saved_files:
+            st.sidebar.image(saved_file, caption=saved_file, use_column_width=True)
+    else:
+        st.sidebar.write("Aucune image sauvegardée pour le moment.")
